@@ -1,8 +1,6 @@
 #![no_std]
 #![no_main]
 
-mod is31fl3731;
-
 use cortex_m_rt::entry;
 
 use embedded_time::duration::*;
@@ -19,7 +17,7 @@ use rp_pico::hal;
 use defmt::*;
 use defmt_rtt as _;
 
-use is31fl3731::CharlieBonnet;
+use is31fl3731::devices::CharlieBonnet;
 
 #[entry]
 fn main() -> ! {
@@ -49,9 +47,7 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
-    info!("Setup stuff");
-
-    let i2c_pio = hal::I2C::i2c0(
+    let i2c = hal::I2C::i2c0(
         pac.I2C0,
         pins.gpio16.into_mode::<hal::gpio::FunctionI2C>(),
         pins.gpio17.into_mode::<hal::gpio::FunctionI2C>(),
@@ -61,11 +57,10 @@ fn main() -> ! {
     );
 
     let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
-
-    let mut matrix = CharlieBonnet::configure(i2c_pio, &mut delay);
+    let mut matrix = CharlieBonnet::configure(i2c, &mut delay);
     matrix.setup().expect("Failed to setup display");
 
-    matrix.fill(10, None, 0).unwrap();
+    info!("Setup everything");
 
     loop {}
 }
