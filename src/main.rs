@@ -1,19 +1,25 @@
 #![no_std]
 #![no_main]
 
+mod is31fl3731;
+
 use cortex_m_rt::entry;
-use embedded_hal::digital::v2::OutputPin;
-use embedded_time::fixed_point::FixedPoint;
-use hal::pac;
-use panic_halt as _;
-use rp2040_hal as hal;
-use rp2040_hal::clocks::Clock;
 
-#[link_section = ".boot2"]
-#[used]
-pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
+use embedded_time::duration::*;
+use embedded_time::rate::Extensions;
 
-const XTAL_FREQ_HZ: u32 = 12_000_000u32;
+use panic_probe as _;
+
+use rp_pico::hal::prelude::*;
+
+use rp_pico::hal::pac;
+
+use rp_pico::hal;
+
+use defmt::*;
+use defmt_rtt as _;
+
+use is31fl3731::CharlieBonnet;
 
 #[entry]
 fn main() -> ! {
@@ -23,7 +29,7 @@ fn main() -> ! {
     let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
 
     let clocks = hal::clocks::init_clocks_and_plls(
-        XTAL_FREQ_HZ,
+        rp_pico::XOSC_CRYSTAL_FREQ,
         pac.XOSC,
         pac.CLOCKS,
         pac.PLL_SYS,
@@ -34,21 +40,32 @@ fn main() -> ! {
     .ok()
     .unwrap();
 
-    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
     let sio = hal::Sio::new(pac.SIO);
 
-    let pins = hal::gpio::Pins::new(
+    let pins = rp_pico::Pins::new(
         pac.IO_BANK0,
         pac.PADS_BANK0,
         sio.gpio_bank0,
         &mut pac.RESETS,
     );
 
-    let mut led_pin = pins.gpio25.into_push_pull_output();
-    loop {
-        led_pin.set_high().unwrap();
-        delay.delay_ms(500);
-        led_pin.set_low().unwrap();
-        delay.delay_ms(500);
-    }
+    info!("Setup stuff");
+
+    let i2c_pio = hal::I2C::i2c0(
+        pac.I2C0,
+        pins.gpio16.into_mode::<hal::gpio::FunctionI2C>(),
+        pins.gpio17.into_mode::<hal::gpio::FunctionI2C>(),
+        100.kHz(),
+        &mut pac.RESETS,
+        clocks.peripheral_clock,
+    );
+
+    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
+
+    let mut matrix = CharlieBonnet::configure(i2c_pio, &mut delay);
+    matrix.setup().expect("Failed to setup display");
+
+    matrix.fill(10, None, 0).unwrap();
+
+    loop {}
 }
